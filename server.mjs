@@ -11,7 +11,7 @@ import { appendEvent, createTask, getOutput, getTask, listEvents, listOutputs, s
 import { createTag, deleteBoard, deleteTag, listBoards, listTags, saveBoard } from './workspace/repository.mjs';
 
 const root = fileURLToPath(new URL('./app/', import.meta.url));
-const port = Number(process.env.IDEA_PLANET_PORT || 4317);
+const port = Number(process.env.PORT || process.env.IDEA_PLANET_PORT || 4317);
 const bodyLimit = 4 * 1024 * 1024;
 const types = {
   '.html': 'text/html; charset=utf-8',
