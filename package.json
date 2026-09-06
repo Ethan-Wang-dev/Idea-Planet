@@ -1,0 +1,15 @@
+{
+  "name": "idea-planet-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local MVP for turning saved posts into owned ideas.",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "check": "node --check server.mjs && node --check db.mjs && node --check app/app.js && node --check agent/context.mjs && node --check agent/kernel.mjs && node --check agent/local-provider.mjs && node --check agent/repository.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0"
+  }
+}

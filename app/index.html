@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f2ed" />
+    <title>Idea Planet</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#today" aria-label="Idea Planet 首页">
+          <span class="brand-mark"><span></span><span></span><span></span></span>
+          <span class="brand-word">idea<span>planet</span></span>
+        </a>
+
+        <div class="orbit-card" aria-label="Idea 数量">
+          <div class="orbit-orb orb-one"></div><div class="orbit-orb orb-two"></div><div class="orbit-orb orb-three"></div>
+          <span class="orbit-label">ideas</span>
+          <strong id="orbitCount">0</strong>
+        </div>
+
+        <nav class="nav-list" aria-label="视图">
+          <a href="#today" data-view="today" data-planet class="nav-item active"><span class="nav-icon">✦</span><span>planet</span><b id="todayCount">0</b></a>
+          <a href="#timeline" data-view="timeline" class="nav-item"><span class="nav-icon">◷</span><span>timeline</span></a>
+          <a href="#library" data-view="library" class="nav-item"><span class="nav-icon">◌</span><span>all ideas</span><b id="libraryCount">0</b></a>
+          <a href="#ask" data-view="ask" class="nav-item"><span class="nav-icon">✦</span><span>ask planet</span></a>
+        </nav>
+        <div class="tag-nav" aria-label="标签看板">
+          <span class="tag-nav-label">boards</span>
+          <a href="#tag/Action" data-tag="Action">Action <button data-pin-tag="Action" aria-label="Pin Action" title="Pin Board"><svg class="board-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M5 3h14l-1 7-4 4v3H10v-3l-4-4-1-7Z"/></svg></button></a>
+          <a href="#tag/Longterm" data-tag="Longterm">Longterm <button data-pin-tag="Longterm" aria-label="Pin Longterm" title="Pin Board"><svg class="board-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M5 3h14l-1 7-4 4v3H10v-3l-4-4-1-7Z"/></svg></button></a>
+          <a href="#tag/Method" data-tag="Method">Method <button data-pin-tag="Method" aria-label="Pin Method" title="Pin Board"><svg class="board-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M5 3h14l-1 7-4 4v3H10v-3l-4-4-1-7Z"/></svg></button></a>
+          <a href="#tag/Question" data-tag="Question">Question <button data-pin-tag="Question" aria-label="Pin Question" title="Pin Board"><svg class="board-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M5 3h14l-1 7-4 4v3H10v-3l-4-4-1-7Z"/></svg></button></a>
+        </div>
+
+        <div class="sidebar-bottom">
+          <button class="text-button" data-action="export" title="导出数据"><span>↓</span> export</button>
+          <span class="local-note">local / private</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="top-heading">
+            <p class="eyebrow" id="eyebrow">IDEAS · 2026</p>
+            <h1 id="pageTitle">Ideas</h1>
+          </div>
+          <div class="top-actions">
+            <label class="search-box" title="搜索"><span>⌕</span><input id="searchInput" type="search" placeholder="search" /></label>
+            <button class="primary-button" data-action="capture" title="添加 Idea"><span>＋</span><em>new idea</em></button>
+          </div>
+        </header>
+
+        <section id="viewRoot" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button class="modal-close" data-action="closeModal" aria-label="关闭">×</button>
+        <div id="modalContent"></div>
+      </section>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
