@@ -126,10 +126,13 @@ async function bootstrapApi() {
       localStorage.setItem(API_TOKEN_KEY, apiState.token);
     }
     if (!apiState.token) {
+      // The open-source app is local-first. The browser workspace and its
+      // localStorage data are usable without an account or a remote API.
       apiState.ready = true;
-      apiState.online = true;
+      apiState.online = false;
       apiState.authenticated = false;
-      showLanding();
+      showWorkspace();
+      render();
       return;
     }
     apiState.authenticated = true;
@@ -149,7 +152,7 @@ async function bootstrapApi() {
     render();
   } catch (error) {
     apiState.online = false;
-    if (!apiState.token) { apiState.authenticated = false; showLanding(); }
+    if (!apiState.token) { apiState.authenticated = false; showWorkspace(); render(); }
     else { apiState.authenticated = true; showWorkspace(); render(); }
     console.info('Idea Planet API unavailable; using local cache.', error.message);
   } finally { apiState.booting = false; }
@@ -497,12 +500,8 @@ function showAuthModal(mode = 'login') {
 
 function startCreating() {
   pendingComposerPrompt = String(document.querySelector('.landing-composer textarea')?.value || '').trim();
-  if (apiState.token && apiState.authenticated) {
-    showWorkspace(); state.view = 'today'; history.replaceState({}, '', '/#today'); render();
-    if (pendingComposerPrompt) { const prompt = pendingComposerPrompt; pendingComposerPrompt = ''; modalCapture({ body: prompt }); }
-    return;
-  }
-  showAuthModal('register');
+  showWorkspace(); state.view = 'today'; history.replaceState({}, '', '/#today'); render();
+  if (pendingComposerPrompt) { const prompt = pendingComposerPrompt; pendingComposerPrompt = ''; modalCapture({ body: prompt }); }
 }
 
 function toggleMenu() {
@@ -645,7 +644,9 @@ function readCaptureQuery() {
   try { const capture = JSON.parse(decodeURIComponent(params.get('capture'))); modalCapture(capture); history.replaceState({}, '', location.pathname); } catch { /* ignore malformed extension data */ }
 }
 const hashView = location.hash.slice(1); if (['today', 'timeline', 'library', 'ask'].includes(hashView)) state.view = hashView;
-showLanding();
+// Local-first default: open the personal workspace immediately. The landing
+// page remains available as a public presentation, but never gates local use.
+showWorkspace();
 render();
 readCaptureQuery();
 apiRequest('/public/home').then(data => { landingData = data; renderLanding(); }).catch(error => console.info('Idea Planet landing content unavailable:', error.message));

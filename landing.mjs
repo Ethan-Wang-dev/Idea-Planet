@@ -52,8 +52,9 @@ export function getPublicConfig() {
   return {
     service: 'idea-planet',
     schemaVersion: publicHome.schemaVersion,
-    devSessionEnabled: process.env.NODE_ENV !== 'production' && process.env.IDEA_PLANET_DEV_SESSION === 'true',
-    authentication: { registration: true, passwordLogin: true },
+    devSessionEnabled: false,
+    mode: 'local-first',
+    authentication: { registration: false, passwordLogin: false },
     agent: { enabled: false, status: 'designing' }
   };
 }
