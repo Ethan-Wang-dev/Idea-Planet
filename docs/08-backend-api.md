@@ -1,6 +1,6 @@
 # Idea Planet · Backend API v0
 
-当前版本是本地开发 API，不代表正式公开 API。目标是先固定数据边界，再接入网页和插件。
+当前版本是 Idea Planet 的网页 API。公开首页接口不需要登录，个人数据和 Agent 任务仍然只对当前用户开放。
 
 ## 启动
 
@@ -15,17 +15,36 @@ IDEA_PLANET_DB=/tmp/idea-planet.sqlite npm run dev
 GET /api/v1/health
 ```
 
+### 公开首页
+
+```text
+GET /api/v1/public/config
+GET /api/v1/public/home
+```
+
+两个接口不需要 `Authorization`。`public/config` 返回当前部署是否允许本地开发会话，以及 Agent 的产品状态；`public/home` 返回首页文案、功能卡片、作品展示、社区和统计数据。首页内容集中在 `landing.mjs`，后续可以迁移到 CMS 或管理后台，网页不需要改路由。
+
+### 开发会话
+
 开发环境可以通过下面的接口取得本地开发会话：
 
 ```text
 POST /api/v1/auth/dev-session
 ```
 
-正式环境会关闭这个入口。正式登录方式尚未决定，因此现在不需要注册第三方身份服务。
+正式环境会关闭这个入口。当前已提供邮箱和密码注册/登录，用于内测；生产环境仍应在开放更大范围前接入邮件验证、限流和密码找回。
+
+```text
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+```
+
+注册和登录返回 `{ token, user }`，数据接口继续使用 `Authorization: Bearer <session-token>`。
 
 ## 当前接口
 
-除健康检查和开发会话外，都需要：
+除健康检查、公开首页和认证接口外，都需要：
 
 ```text
 Authorization: Bearer <session-token>
@@ -116,7 +135,7 @@ DELETE /api/v1/boards/:id?revision=<revision>
 
 ## 当前刻意没有做的事情
 
-- 正式用户注册、OAuth、密码登录。
+- OAuth、邮件验证、密码找回和多因素认证。
 - 生产环境 CORS、域名和反向代理配置。
 - 公开 API key。
 - 外部模型 Provider、向量检索和工具执行；当前只有不调用外部模型的本地 Recall runner。

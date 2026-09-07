@@ -3,12 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  authenticate, createDevSession, db, deleteIdea, deleteRelation, findIdea, listIdeas, listRelations, now,
+  authenticate, createDevSession, registerUser, loginUser, revokeSession, updateUser, deleteUser, db, deleteIdea, deleteRelation, findIdea, listIdeas, listRelations, now,
   pullChanges, publicIdea, saveIdea, saveRelation, syncIdeas
 } from './db.mjs';
 import { defaultAgentKernel } from './agent/kernel.mjs';
 import { appendEvent, createTask, getOutput, getTask, listEvents, listOutputs, setTaskStatus } from './agent/repository.mjs';
 import { createTag, deleteBoard, deleteTag, listBoards, listTags, saveBoard } from './workspace/repository.mjs';
+import { getPublicConfig, getPublicHome } from './landing.mjs';
 
 const root = fileURLToPath(new URL('./app/', import.meta.url));
 const port = Number(process.env.PORT || process.env.IDEA_PLANET_PORT || 4317);
@@ -73,9 +74,26 @@ async function api(req, res, url) {
   if (req.method === 'GET' && path === '/api/v1/health') {
     send(res, 200, { ok: true, service: 'idea-planet-api', time: now() }, headers); return;
   }
+  if (req.method === 'GET' && path === '/api/v1/public/config') {
+    send(res, 200, getPublicConfig(), headers); return;
+  }
+  if (req.method === 'GET' && path === '/api/v1/public/home') {
+    send(res, 200, getPublicHome(), headers); return;
+  }
   if (process.env.NODE_ENV !== 'production' && req.method === 'POST' && path === '/api/v1/auth/dev-session') {
     send(res, 200, createDevSession(), headers); return;
   }
+  if (req.method === 'POST' && path === '/api/v1/auth/register') {
+    const payload = await readJson(req);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw Object.assign(new Error('Registration payload must be an object'), { status: 400 });
+    send(res, 201, registerUser(payload), headers); return;
+  }
+  if (req.method === 'POST' && path === '/api/v1/auth/login') {
+    const payload = await readJson(req);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw Object.assign(new Error('Login payload must be an object'), { status: 400 });
+    send(res, 200, loginUser(payload), headers); return;
+  }
+  if (req.method === 'POST' && path === '/api/v1/auth/logout') { revokeSession(bearer(req)); send(res, 204, {}, headers); return; }
 
   const user = requireUser(req, res);
   if (!user) return;
@@ -83,6 +101,8 @@ async function api(req, res, url) {
   if (req.method === 'GET' && path === '/api/v1/me') {
     send(res, 200, { user }, headers); return;
   }
+  if (req.method === 'PATCH' && path === '/api/v1/me') { send(res, 200, { user: updateUser(user.id, await readJson(req)) }, headers); return; }
+  if (req.method === 'DELETE' && path === '/api/v1/me') { deleteUser(user.id); send(res, 204, {}, headers); return; }
   if (req.method === 'GET' && path === '/api/v1/ideas') {
     send(res, 200, { ideas: listIdeas(user.id, { includeDeleted: url.searchParams.get('includeDeleted') === 'true', limit: url.searchParams.get('limit') }) }, headers); return;
   }

@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import Database from 'better-sqlite3';
 
 const defaultPath = process.env.IDEA_PLANET_DB || new URL('./.data/idea-planet.sqlite', import.meta.url).pathname;
@@ -14,7 +14,8 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE,
     display_name TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    password_hash TEXT
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -174,6 +175,7 @@ function ensureColumn(table, column, definition) {
 
 // Lightweight forward migrations for the local development database. Production
 // migrations will move to numbered migration files before deployment.
+ensureColumn('users', 'password_hash', 'TEXT');
 ensureColumn('ideas', 'revision', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('ideas', 'parent_id', 'TEXT');
 ensureColumn('boards', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
@@ -213,6 +215,48 @@ export function createDevSession() {
     .run(tokenHash(token), user.id, createdAt);
   return { token, user: publicUser(user) };
 }
+
+function issueSession(userId) {
+  const token = `ip_${cryptoRandom()}`;
+  db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)' )
+    .run(tokenHash(token), userId, now(), new Date(Date.now() + 30 * 86400000).toISOString());
+  return token;
+}
+
+export function registerUser({ email, password, displayName }) {
+  const clean = String(email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) throw Object.assign(new Error('A valid email is required'), { status: 400 });
+  if (String(password || '').length < 8) throw Object.assign(new Error('Password must be at least 8 characters'), { status: 400 });
+  if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(clean)) throw Object.assign(new Error('Email is already registered'), { status: 409 });
+  const id = `user_${cryptoRandom()}`; const createdAt = now();
+  const salt = randomBytes(16).toString('hex');
+  const hash = `${salt}:${scryptSync(String(password), salt, 64).toString('hex')}`;
+  db.prepare('INSERT INTO users (id,email,display_name,created_at,password_hash) VALUES (?,?,?,?,?)').run(id, clean, String(displayName || clean.split('@')[0]).slice(0,80), createdAt, hash);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  return { token: issueSession(id), user: publicUser(user) };
+}
+
+export function loginUser({ email, password }) {
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(String(email || '').trim().toLowerCase());
+  const [salt, expected] = String(user?.password_hash || ':').split(':');
+  const actual = salt ? scryptSync(String(password || ''), salt, 64).toString('hex') : '';
+  if (!user || !expected || actual.length !== expected.length || !timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) throw Object.assign(new Error('Invalid email or password'), { status: 401 });
+  return { token: issueSession(user.id), user: publicUser(user) };
+}
+
+export function revokeSession(token) { if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash(token)); }
+export function updateUser(userId, { displayName, password }) {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!user) return null;
+  let hash = user.password_hash;
+  if (password !== undefined) {
+    if (String(password).length < 8) throw Object.assign(new Error('Password must be at least 8 characters'), { status: 400 });
+    const salt = randomBytes(16).toString('hex'); hash = `${salt}:${scryptSync(String(password), salt, 64).toString('hex')}`;
+  }
+  db.prepare('UPDATE users SET display_name = ?, password_hash = ? WHERE id = ?').run(displayName === undefined ? user.display_name : String(displayName).trim().slice(0,80), hash, userId);
+  return publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId));
+}
+export function deleteUser(userId) { db.prepare('DELETE FROM users WHERE id = ?').run(userId); }
 
 function cryptoRandom() {
   return randomBytes(24).toString('hex');

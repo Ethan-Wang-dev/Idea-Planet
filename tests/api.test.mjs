@@ -49,6 +49,49 @@ test('requires authentication for user data', async () => {
   assert.equal(result.payload.error, 'unauthorized');
 });
 
+test('serves the public landing contract without authentication', async () => {
+  const config = await json(`${base}/api/v1/public/config`);
+  assert.equal(config.response.status, 200);
+  assert.equal(config.payload.service, 'idea-planet');
+  assert.equal(config.payload.agent.enabled, false);
+  assert.equal(typeof config.payload.devSessionEnabled, 'boolean');
+
+  const home = await json(`${base}/api/v1/public/home`);
+  assert.equal(home.response.status, 200);
+  assert.equal(home.payload.brand.name, 'Idea Planet');
+  assert.equal(home.payload.hero.title, '大胆创作');
+  assert.ok(home.payload.features.length >= 3);
+  assert.ok(home.payload.gallery.every(item => item.image && item.title));
+  assert.ok(home.payload.stats.some(item => item.value === '700K+'));
+});
+
+test('registers, logs in and revokes a password session', async () => {
+  const email = `test-${Date.now()}@example.com`;
+  const registered = await json(`${base}/api/v1/auth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'correct horse battery staple', displayName: 'Test Creator' })
+  });
+  assert.equal(registered.response.status, 201);
+  assert.equal(registered.payload.user.displayName, 'Test Creator');
+  assert.ok(registered.payload.token);
+
+  const login = await json(`${base}/api/v1/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'correct horse battery staple' })
+  });
+  assert.equal(login.response.status, 200);
+  assert.ok(login.payload.token);
+
+  const me = await json(`${base}/api/v1/me`, { headers: { Authorization: `Bearer ${login.payload.token}` } });
+  assert.equal(me.response.status, 200);
+  assert.equal(me.payload.user.email, email);
+
+  const logout = await fetch(`${base}/api/v1/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${login.payload.token}` } });
+  assert.equal(logout.status, 204);
+  const afterLogout = await json(`${base}/api/v1/me`, { headers: { Authorization: `Bearer ${login.payload.token}` } });
+  assert.equal(afterLogout.response.status, 401);
+});
+
 test('creates, updates and pulls an Idea through the API', async () => {
   const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
   assert.equal(session.response.status, 200);
