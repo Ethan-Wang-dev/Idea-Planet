@@ -1,7 +1,9 @@
 const STORAGE_KEY = 'idea-planet-mvp-v1';
-const API_TOKEN_KEY = 'idea-planet-api-token';
-const API_CURSOR_KEY = 'idea-planet-api-cursor';
-const apiState = { token: localStorage.getItem(API_TOKEN_KEY) || '', cursor: Number(localStorage.getItem(API_CURSOR_KEY) || 0), ready: false, online: false, authenticated: false, booting: false, syncing: false, pulling: false, dirty: false, config: null };
+const PENDING_KEY = 'idea-planet-local-pending';
+const apiState = { ready: false, online: false, booting: false, syncing: false };
+let pending = {};
+try { pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '{}'); } catch {}
+let baseline = new Map();
 
 const seedIdeas = [
   {
@@ -43,47 +45,6 @@ const agentState = { prompt: '', status: 'idle', task: null, output: null, error
 const expandedIdeas = new Set();
 let activeEditor = null;
 const viewRoot = document.querySelector('#viewRoot');
-let landingData = null;
-
-function renderLanding(data = landingData) {
-  if (!data) return;
-  const hero = data.hero || {};
-  const brand = data.brand || {};
-  const setText = (selector, value) => { const node = document.querySelector(selector); if (node && value !== undefined) node.textContent = value; };
-  setText('#landingEyebrow', hero.eyebrow);
-  setText('#landingTitle', hero.title);
-  setText('#landingSubtitle', hero.subtitle);
-  setText('#landingDescription', hero.description);
-  setText('.footer-brand p', brand.tagline);
-  setText('#communityTitle', data.community?.title);
-  setText('#communityDescription', data.community?.description);
-  const gallery = document.querySelector('#landingGallery');
-  if (gallery) gallery.innerHTML = (data.gallery || []).map(item => `<article class="gallery-card"><div class="gallery-visual"><img src="${esc(item.image)}" alt="${esc(item.title)}" loading="lazy" /></div><div class="gallery-copy"><div><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p></div><span class="gallery-type">${esc(item.type)}</span></div></article>`).join('');
-  const stats = document.querySelector('#landingStats');
-  if (stats) stats.innerHTML = (data.stats || []).map(item => `<article class="stat-card"><strong>${esc(item.value)}</strong><h3>${esc(item.label)}</h3><p>${esc(item.description)}</p></article>`).join('');
-}
-
-function showLanding() {
-  const landing = document.querySelector('#landingRoot');
-  const workspace = document.querySelector('#workspaceShell');
-  if (landing) landing.hidden = false;
-  if (workspace) workspace.hidden = true;
-  document.body.classList.add('landing-mode');
-  renderLanding();
-  const cookie = document.querySelector('#cookieBanner');
-  if (cookie && localStorage.getItem('idea-planet-cookie-choice') !== 'saved') cookie.hidden = false;
-}
-
-function showWorkspace() {
-  const landing = document.querySelector('#landingRoot');
-  const workspace = document.querySelector('#workspaceShell');
-  if (landing) landing.hidden = true;
-  if (workspace) workspace.hidden = false;
-  document.querySelector('#menuPanel')?.setAttribute('hidden', '');
-  document.querySelector('#cookieBanner')?.setAttribute('hidden', '');
-  document.body.classList.remove('landing-mode');
-}
-
 function loadIdeas() {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -96,139 +57,102 @@ function loadIdeas() {
   return structuredClone(seedIdeas);
 }
 
+function saveLocalIdeas() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.ideas)); }
+function rememberPending() { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); }
 function saveIdeas() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.ideas));
-  if (apiState.ready && apiState.online) queueApiSync();
+  saveLocalIdeas();
+  for (const idea of state.ideas) {
+    if (JSON.stringify(idea) !== baseline.get(idea.id)) pending[idea.id] = structuredClone(idea);
+  }
+  rememberPending();
+  storageStatus('browser cache · pending');
+  queueApiSync();
 }
-
-function apiRequest(path, options = {}) {
+function storageStatus(text) {
+  const node = document.querySelector('#storageStatus');
+  if (node) node.textContent = text;
+}
+async function apiRequest(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  if (apiState.token) headers.set('Authorization', `Bearer ${apiState.token}`);
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  return fetch(`/api/v1${path}`, { ...options, headers }).then(async response => {
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.message || `API request failed (${response.status})`);
-    return payload;
-  });
+  if (options.body) headers.set('Content-Type', 'application/json');
+  const response = await fetch('/api/v1' + path, { ...options, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || 'Local request failed (' + response.status + ')');
+  return payload;
 }
-
 async function bootstrapApi() {
-  if (apiState.booting) return;
+  if (apiState.booting || apiState.syncing) return;
   apiState.booting = true;
   try {
-    apiState.config = await apiRequest('/public/config');
-    if (apiState.token) {
-      try { await apiRequest('/me'); } catch { apiState.token = ''; apiState.authenticated = false; localStorage.removeItem(API_TOKEN_KEY); }
+    const result = await apiRequest('/ideas');
+    const disk = result.ideas || [];
+    // Only import the old browser cache into an empty disk workspace once.
+    const migrationKey = 'idea-planet-local-imported';
+    if (!disk.length && !localStorage.getItem(migrationKey)) {
+      for (const idea of state.ideas) pending[idea.id] ||= structuredClone(idea);
+      rememberPending();
     }
-    if (!apiState.token && apiState.config?.devSessionEnabled) {
-      const session = await apiRequest('/auth/dev-session', { method: 'POST' });
-      apiState.token = session.token;
-      localStorage.setItem(API_TOKEN_KEY, apiState.token);
-    }
-    if (!apiState.token) {
-      // The open-source app is local-first. The browser workspace and its
-      // localStorage data are usable without an account or a remote API.
-      apiState.ready = true;
-      apiState.online = false;
-      apiState.authenticated = false;
-      showWorkspace();
-      render();
-      return;
-    }
-    apiState.authenticated = true;
-    showWorkspace();
-    const remote = await apiRequest('/ideas');
-    const localStored = readStoredIdeas();
-    if (remote.ideas?.length || localStored) {
-      // During the first migration, merge both sides so a local-only edit is not
-      // silently discarded. A later sync protocol can replace this with revisions.
-      state.ideas = dedupeIdeas([...(remote.ideas || []), ...(localStored || [])]);
-      saveLocalIdeas();
-      if (state.ideas.length) await pushIdeas(state.ideas);
-    }
+    baseline = new Map(disk.map(idea => [idea.id, JSON.stringify(idea)]));
+    const merged = new Map(disk.map(idea => [idea.id, idea]));
+    for (const idea of Object.values(pending)) merged.set(idea.id, idea);
+    state.ideas = [...merged.values()];
+    saveLocalIdeas();
+    localStorage.setItem(migrationKey, 'true');
     apiState.ready = true;
     apiState.online = true;
-    await pullApiChanges();
+    await flushApiSync();
     render();
   } catch (error) {
     apiState.online = false;
-    if (!apiState.token) { apiState.authenticated = false; showWorkspace(); render(); }
-    else { apiState.authenticated = true; showWorkspace(); render(); }
-    console.info('Idea Planet API unavailable; using local cache.', error.message);
+    storageStatus('browser cache · pending');
+    console.info('Local database unavailable:', error.message);
   } finally { apiState.booting = false; }
 }
-
-function readStoredIdeas() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return Array.isArray(stored) ? stored : null;
-  } catch { return null; }
-}
-
-function saveLocalIdeas() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.ideas)); }
-
-async function pushIdeas(ideas) {
-  if (!apiState.token || !ideas.length) return;
-  const result = await apiRequest('/sync/push', { method: 'POST', body: JSON.stringify({ ideas }) });
-  if (Number(result.cursor) > apiState.cursor) {
-    apiState.cursor = Number(result.cursor);
-    localStorage.setItem(API_CURSOR_KEY, String(apiState.cursor));
-  }
-  for (const accepted of result.accepted || []) {
-    const local = state.ideas.find(idea => idea.id === accepted.id);
-    if (local) Object.assign(local, accepted);
-  }
-  saveLocalIdeas();
-  if (result.conflicts?.length) {
-    apiState.online = false;
-    console.warn('Idea Planet sync conflicts require review.', result.conflicts);
-    if (apiState.ready) toast(`${result.conflicts.length} 条 Idea 有同步冲突，暂留在本地`);
-  }
-}
-
-async function pullApiChanges() {
-  if (!apiState.ready || !apiState.online || !apiState.authenticated || !apiState.token || apiState.pulling) return;
-  apiState.pulling = true;
-  try {
-    const result = await apiRequest(`/sync/pull?after=${encodeURIComponent(apiState.cursor)}`);
-    let changed = false;
-    for (const change of result.changes || []) {
-      if (change.entityType !== 'idea') continue;
-      const index = state.ideas.findIndex(idea => idea.id === change.entityId);
-      if (change.deletedAt) {
-        if (index >= 0) { state.ideas.splice(index, 1); changed = true; }
-        continue;
-      }
-      if (!change.idea) continue;
-      if (index < 0) state.ideas.push(change.idea);
-      else if (Number(state.ideas[index].revision || 0) <= Number(change.idea.revision || 0)) state.ideas[index] = change.idea;
-      changed = true;
-    }
-    if (Number(result.cursor) > apiState.cursor) {
-      apiState.cursor = Number(result.cursor);
-      localStorage.setItem(API_CURSOR_KEY, String(apiState.cursor));
-    }
-    if (changed) { saveLocalIdeas(); render(); }
-  } catch (error) {
-    apiState.online = false;
-    console.info('Idea Planet pull paused:', error.message);
-  } finally { apiState.pulling = false; }
-}
-
 let syncTimer = null;
 function queueApiSync() {
-  apiState.dirty = true;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(flushApiSync, 120);
+  syncTimer = setTimeout(() => flushApiSync().catch(error => toast(error.message)), 120);
 }
-
+let activeWrite = null;
 async function flushApiSync() {
-  if (!apiState.ready || !apiState.online || apiState.syncing || !apiState.dirty) return;
+  while (activeWrite) await activeWrite;
+  activeWrite = writePending();
+  try { await activeWrite; } finally { activeWrite = null; }
+}
+async function writePending() {
+  if (!Object.keys(pending).length) {
+    storageStatus(apiState.online ? 'local SQLite' : 'browser cache');
+    return;
+  }
   apiState.syncing = true;
-  apiState.dirty = false;
-  try { await pushIdeas(state.ideas); }
-  catch (error) { apiState.online = false; apiState.dirty = true; console.info('Idea Planet sync paused:', error.message); }
-  finally { apiState.syncing = false; if (apiState.dirty && apiState.online) queueApiSync(); }
+  const snapshot = structuredClone(pending);
+  try {
+    const result = await apiRequest('/local/ideas/batch', {
+      method: 'POST', body: JSON.stringify({ ideas: Object.values(snapshot) })
+    });
+    for (const accepted of result.accepted || []) {
+      baseline.set(accepted.id, JSON.stringify(accepted));
+      if (JSON.stringify(pending[accepted.id]) === JSON.stringify(snapshot[accepted.id])) {
+        delete pending[accepted.id];
+        const index = state.ideas.findIndex(idea => idea.id === accepted.id);
+        if (index >= 0) state.ideas[index] = accepted;
+      } else if (pending[accepted.id]) {
+        pending[accepted.id].revision = accepted.revision;
+        const local = state.ideas.find(idea => idea.id === accepted.id);
+        if (local) local.revision = accepted.revision;
+      }
+    }
+    rememberPending();
+    saveLocalIdeas();
+    if (result.conflicts?.length) throw new Error('本地版本冲突：修改保留在浏览器，请先导出备份后处理。');
+    apiState.online = true;
+    storageStatus('local SQLite');
+  } catch (error) {
+    apiState.online = false;
+    storageStatus('browser cache · pending');
+    throw error;
+  } finally { apiState.syncing = false; }
+  if (Object.keys(pending).length) queueApiSync();
 }
 function loadPinnedTags() { try { const value = JSON.parse(localStorage.getItem('idea-planet-pinned-tags')); return Array.isArray(value) ? value : []; } catch { return []; } }
 function savePinnedTags() { localStorage.setItem('idea-planet-pinned-tags', JSON.stringify(state.pinnedTags)); }
@@ -432,6 +356,7 @@ async function runAgentTask(prompt) {
   }
   agentState.prompt = prompt; agentState.status = 'queued'; agentState.output = null; agentState.error = ''; renderAsk();
   try {
+    await flushApiSync();
     const created = await apiRequest('/agent/tasks', { method: 'POST', body: JSON.stringify({ type: 'recall', prompt }) });
     agentState.task = created.task;
     await pollAgentTask(created.task.id);
@@ -460,57 +385,8 @@ async function pollAgentTask(taskId) {
 async function saveAgentOutput(outputId) {
   try {
     const result = await apiRequest(`/agent/outputs/${encodeURIComponent(outputId)}/save-as-idea`, { method: 'POST', body: JSON.stringify({ title: '' }) });
-    state.ideas.unshift(result.idea); saveLocalIdeas(); agentState.output = null; render(); toast('Agent 结果已保存为新的 Idea');
+    state.ideas.unshift(result.idea); baseline.set(result.idea.id, JSON.stringify(result.idea)); saveLocalIdeas(); agentState.output = null; render(); toast('Agent 结果已保存为新的 Idea');
   } catch (error) { agentState.error = error.message; renderAsk(); }
-}
-
-let pendingComposerPrompt = '';
-function showAuthModal(mode = 'login') {
-  const register = mode === 'register';
-  const menu = document.querySelector('#menuPanel');
-  if (menu && !menu.hidden) toggleMenu();
-  openModal(`<div class="auth-panel"><p class="landing-eyebrow">IDEA PLANET · YOUR SPACE</p><h2 id="modalTitle">${register ? '创建你的 Idea Planet' : '回到你的 Idea Planet'}</h2><p class="modal-intro">${register ? '从一个想法开始，建立属于你的创作空间。' : '登录后继续整理你的想法和创作。'}</p><form id="authForm" class="form-grid"><div class="field"><label for="authEmail">邮箱</label><input id="authEmail" name="email" type="email" autocomplete="email" required placeholder="you@example.com" /></div>${register ? '<div class="field"><label for="authDisplayName">称呼（可选）</label><input id="authDisplayName" name="displayName" autocomplete="name" placeholder="你的名字" /></div>' : ''}<div class="field"><label for="authPassword">密码</label><input id="authPassword" name="password" type="password" minlength="8" autocomplete="${register ? 'new-password' : 'current-password'}" required placeholder="至少 8 个字符" /></div><div id="authError" class="auth-error" hidden></div><div class="form-actions"><button type="button" class="cancel-button" data-action="closeModal">稍后再说</button><button class="solid-button" id="authSubmit">${register ? '创建账户' : '登录'}</button></div></form><p class="auth-switch">${register ? '已经有账户？' : '还没有账户？'} <button type="button" data-auth-mode="${register ? 'login' : 'register'}">${register ? '登录' : '免费创建'}</button></p></div>`);
-  document.querySelector('#authForm')?.addEventListener('submit', async event => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const submit = document.querySelector('#authSubmit');
-    const errorNode = document.querySelector('#authError');
-    submit.disabled = true;
-    if (errorNode) errorNode.hidden = true;
-    try {
-      const endpoint = register ? '/auth/register' : '/auth/login';
-      const result = await apiRequest(endpoint, { method: 'POST', body: JSON.stringify({ email: form.get('email'), password: form.get('password'), displayName: form.get('displayName') || undefined }) });
-      if (!result.token) throw new Error('登录响应缺少会话');
-      apiState.token = result.token;
-      apiState.cursor = 0;
-      apiState.authenticated = true;
-      localStorage.setItem(API_TOKEN_KEY, apiState.token);
-      localStorage.removeItem(API_CURSOR_KEY);
-      closeModal();
-      history.replaceState({}, '', '/#today');
-      showWorkspace();
-      await bootstrapApi();
-      if (pendingComposerPrompt) { const prompt = pendingComposerPrompt; pendingComposerPrompt = ''; modalCapture({ body: prompt }); }
-    } catch (error) {
-      if (errorNode) { errorNode.textContent = error.message; errorNode.hidden = false; }
-    } finally { submit.disabled = false; }
-  });
-  document.querySelector('#authEmail')?.focus();
-}
-
-function startCreating() {
-  pendingComposerPrompt = String(document.querySelector('.landing-composer textarea')?.value || '').trim();
-  showWorkspace(); state.view = 'today'; history.replaceState({}, '', '/#today'); render();
-  if (pendingComposerPrompt) { const prompt = pendingComposerPrompt; pendingComposerPrompt = ''; modalCapture({ body: prompt }); }
-}
-
-function toggleMenu() {
-  const panel = document.querySelector('#menuPanel');
-  const toggle = document.querySelector('.menu-toggle');
-  if (!panel) return;
-  panel.hidden = !panel.hidden;
-  toggle?.setAttribute('aria-expanded', String(!panel.hidden));
-  document.body.classList.toggle('menu-open', !panel.hidden);
 }
 
 function openModal(content) { document.querySelector('#modalContent').innerHTML = content; document.querySelector('#modalBackdrop').hidden = false; }
@@ -578,9 +454,6 @@ document.addEventListener('pointerdown', event => {
   if (!event.target.closest('[data-edit]')) { activeEditor.__finishEdit?.(true); activeEditor = null; }
 }, true);
 document.addEventListener('click', event => {
-  const authMode = event.target.closest('[data-auth-mode]');
-  if (authMode) { event.preventDefault(); showAuthModal(authMode.dataset.authMode || 'login'); return; }
-  if (event.target.closest('[data-menu-link]')) { toggleMenu(); return; }
   const editable = event.target.closest('[data-edit]'); if (editable) { const article = editable.closest('[data-id]'); const item = article && ideaById(article.dataset.id); if (item && !editable.isContentEditable) { const original = editable.innerText; activeEditor = editable; editable.contentEditable = 'true'; editable.classList.add('editing'); editable.focus(); const finish = save => { editable.contentEditable = 'false'; editable.removeAttribute('contenteditable'); editable.classList.remove('editing'); editable.style.outline = ''; if (activeEditor === editable) activeEditor = null; if (save) { const value = editable.innerText.trim(); if (editable.dataset.edit === 'title') item.title = value; else { item.body = value; item.bodyHtml = ''; } saveIdeas(); toast('已更新'); } else editable.innerText = original; editable.removeEventListener('blur', onBlur); }; const onBlur = () => { finish(true); window.requestAnimationFrame(() => editable.classList.remove('editing')); }; editable.__finishEdit = finish; editable.addEventListener('blur', onBlur, { once: true }); editable.addEventListener('keydown', keyEvent => { if (keyEvent.key === 'Escape') { keyEvent.preventDefault(); editable.removeEventListener('blur', onBlur); finish(false); } if (keyEvent.key === 'Enter' && editable.dataset.edit === 'title') { keyEvent.preventDefault(); editable.blur(); } }); } return; }
   const pin = event.target.closest('[data-pin-tag]'); if (pin) { event.preventDefault(); event.stopPropagation(); const tag = pin.dataset.pinTag; state.pinnedTags = state.pinnedTags.includes(tag) ? state.pinnedTags.filter(item => item !== tag) : [...state.pinnedTags, tag]; savePinnedTags(); render(); return; }
   const shuffle = event.target.closest('[data-shuffle-tag]'); if (shuffle) { event.preventDefault(); const tag = shuffle.dataset.shuffleTag; const candidates = state.ideas.filter(item => (item.tags || []).includes(tag) && item.status !== 'dismissed'); if (candidates.length) { const choice = candidates[Math.floor(Math.random() * candidates.length)]; const node = document.querySelector(`[data-open-idea="${CSS.escape(choice.id)}"]`); node?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } return; }
@@ -590,10 +463,6 @@ document.addEventListener('click', event => {
   const tag = event.target.closest('[data-tag]'); if (tag) { event.preventDefault(); state.tag = tag.dataset.tag; state.view = 'today'; history.replaceState({}, '', `/#tag/${encodeURIComponent(state.tag)}`); render(); return; }
   const button = event.target.closest('[data-action]'); if (!button) return;
   const action = button.dataset.action;
-  if (action === 'startCreating') return startCreating();
-  if (action === 'toggleMenu') return toggleMenu();
-  if (action === 'dismissCookie') { localStorage.setItem('idea-planet-cookie-choice', 'saved'); document.querySelector('#cookieBanner')?.setAttribute('hidden', ''); return; }
-  if (action === 'composerPrompt') return;
   if (action === 'capture') return modalCapture();
   if (action === 'closeModal') return closeModal();
   if (action === 'export') return exportData();
@@ -644,13 +513,9 @@ function readCaptureQuery() {
   try { const capture = JSON.parse(decodeURIComponent(params.get('capture'))); modalCapture(capture); history.replaceState({}, '', location.pathname); } catch { /* ignore malformed extension data */ }
 }
 const hashView = location.hash.slice(1); if (['today', 'timeline', 'library', 'ask'].includes(hashView)) state.view = hashView;
-// Local-first default: open the personal workspace immediately. The landing
-// page remains available as a public presentation, but never gates local use.
-showWorkspace();
 render();
 readCaptureQuery();
-apiRequest('/public/home').then(data => { landingData = data; renderLanding(); }).catch(error => console.info('Idea Planet landing content unavailable:', error.message));
 bootstrapApi();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) apiState.online ? pullApiChanges() : bootstrapApi(); });
-window.addEventListener('online', () => { apiState.online ? pullApiChanges() : bootstrapApi(); });
-window.setInterval(() => { apiState.online ? pullApiChanges() : bootstrapApi(); }, 30_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) bootstrapApi(); });
+window.addEventListener('online', () => { bootstrapApi(); });
+window.setInterval(() => { bootstrapApi(); }, 30_000);

@@ -2,67 +2,68 @@
 
 让过去的想法，在今天继续为你创造。
 
-把你在 X 上看过、写过和实践过的内容，交给逐渐了解你的 Agent，在你需要时帮你写出内容、做出判断、推进事情。
+本地优先的个人 Idea 工作台。通过 X 插件或手动输入收集内容，回顾、延伸自己的想法，并在需要时召回它们。无需注册、登录或官方云端服务。
 
-产品核心、目标用户和对外表达见 [docs/04-product-core.md](./docs/04-product-core.md)。
+## 运行
 
-当前按开源项目推进，域名、Cloudflare 和 Zeabur 保留用于官网、文档和官方在线 Demo；详见 [docs/09-open-source-direction.md](./docs/09-open-source-direction.md)。云端化、订阅、AI credits 与 SaaS UI 仍是未来假设，见 [docs/05-business-model.md](./docs/05-business-model.md) 和 [docs/06-saas-ui-direction.md](./docs/06-saas-ui-direction.md)。
-
-## 本地运行（默认模式）
-
-需要 Node.js 18+：
+需要 Node.js 22：
 
 ```bash
-npm run dev
+npm ci
+npm start
 ```
 
-然后打开 <http://localhost:4317>。公开版默认直接进入本地工作台，不需要登录或注册；Idea 数据保存在浏览器 `localStorage`，可以在侧栏导出 JSON 备份。服务端同时提供本地 SQLite 数据库和 API 能力，默认数据库位于 `.data/idea-planet.sqlite`，适合后续接入本地 Agent。若端口被占用，可以用 `IDEA_PLANET_PORT=4300 npm run dev` 更换端口；插件当前固定连接 4317，换端口时需同步修改插件中的地址。
+打开 <http://127.0.0.1:4317>，直接进入 Planet。
 
-后端 API 开发测试：
+## 数据属于你
 
-```bash
-npm install
-npm test
-IDEA_PLANET_DB=/tmp/idea-planet.sqlite npm run dev
-```
+- Ideas、关系、标签、Board 和 Recall 任务保存在本机 SQLite：`.data/local-planet.sqlite`。
+- 浏览器保留缓存和待写入队列；侧栏显示 `local SQLite` 时表示当前写入已完成，`browser cache · pending` 表示还有待保存的数据。
+- 侧栏 export 导出当前浏览器中的 Ideas JSON；完整数据库备份请先停止服务，再复制 SQLite 文件。Board 固定视图偏好仍保存在浏览器中。
+- 首次使用空数据库时导入当前浏览器的已有 Ideas；旧账户数据库 `.data/idea-planet.sqlite` 保留原样，不自动合并不同账户。
+- 不连接官方服务器、不上传数据；当前 Recall 只使用本地关键词检索。
+- 用户自己的模型 Provider / API Key 配置尚未实现，接入后调用模型会将所选上下文发送至用户选择的服务。
 
-健康检查地址为 <http://localhost:4317/api/v1/health>。公开首页数据位于 `/api/v1/public/home`，部署配置位于 `/api/v1/public/config`。生产环境会自动关闭 `dev-session`；当前内测可使用邮箱和密码注册/登录。
+## 本地配置
 
-## 容器部署
+通过进程环境变量设置，应用不会自动读取 `.env`：
 
-这是一个可持久化 SQLite 数据目录的单体服务，适合先部署到支持 Docker volume 的平台。复制 `.env.example` 为部署环境变量参考，并将 `/app/.data` 挂载到持久化磁盘：
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| IDEA_PLANET_PORT | 4317 | 本地端口 |
+| IDEA_PLANET_DB | .data/local-planet.sqlite | SQLite 路径 |
+| IDEA_PLANET_HOST | 127.0.0.1 | 监听地址 |
+| PORT | 未设置 | 设置后优先于 IDEA_PLANET_PORT |
+
+此版本是单人本地工作台，无账户或权限系统。默认只监听回环地址，拒绝其他网站的跨域请求。
+
+Docker 本地运行：
 
 ```bash
 docker build -t idea-planet .
-docker run --rm -p 4317:4317 -v idea-planet-data:/app/.data idea-planet
+docker run --rm -p 127.0.0.1:4317:4317 -v idea-planet-data:/app/.data idea-planet
 ```
 
-公开版不依赖账户体系；邮箱、密码和远程同步接口属于保留的实验代码，不是本地优先模式的使用前提。
+## 使用
 
-如果要最快看到公网版本，可以将仓库连接到 Render 并使用根目录的 `render.yaml`。Render 会构建 Docker 镜像、挂载 SQLite 持久化磁盘并使用 `/api/v1/health` 做健康检查。首次部署先把 `IDEA_PLANET_ALLOWED_ORIGIN` 设置为 Render 分配的 `https://...onrender.com` 地址；正式用户体系接入前，这个环境只适合个人或邀请制内测。
+1. 点击 new idea，保存一段内容。
+2. 回顾内容，Sweep 放下，或从原文延伸新的 Idea。
+3. 使用标签、Planet、Timeline 和 All ideas 浏览积累。
+4. 在 Ask Planet 输入关键词，查看本地 Recall 结果和引用，再保存为新的 Idea。
 
-## 试用闭环
+## X 插件
 
-1. 在“今日回顾”点击“收集 Idea”，保存一条完整内容。
-2. 对卡片选择“扫掉”“保留”或“写下我的想法”。放下的内容可以在数据备份中恢复，目前界面保留了可恢复状态。
-3. 对一条内容继续写下自己的 Idea；新的观点、行动、结果和问题都作为新的 Idea 保留。
-4. 在 `Ask Planet` 中输入一个问题，使用本地 Recall 找回相关 Idea；结果可以保存为新的 Idea。
-4. 侧栏“思想时间线”会把来源内容和自己的表达放在一起。
+在 Chrome 的 `chrome://extensions` 开启开发者模式，加载 `extension/`。启动本地网站后，在 X 点赞、收藏、发帖或回复时采集内容；网页未打开时暂存在插件队列。
 
-## 加载 Chrome 插件
+插件读取浏览器已呈现的内容，尝试展开 Show more，支持正文补全和去重。不会同步历史点赞或书签；图片、视频、完整线程和引用原帖不保证完整采集。插件目前连接 4317，修改端口需要同步修改插件地址。
 
-打开 `chrome://extensions`，开启“开发者模式”，选择“加载已解压的扩展程序”，选中 `extension/` 文件夹。先启动本地网站，再打开 X 页面。点击 X 自带的 Like 或 Bookmark 后，插件会自动采集当前帖子，并显示一颗飞入 Idea Planet 的火花；网页打开时会自动导入，网页未打开时会先留在插件队列。
+## 开发状态
 
-插件只读取当前浏览器中已经呈现的帖子正文；遇到 `Show more` 会先展开再保存，并过滤作者重复、Show translation、Quote、Relevant、Views、计数和操作按钮文本。插件弹窗里的“重新采集当前帖子”可以补全已经保存过的截断内容。它没有 X 账户登录能力，也不会同步历史 Like 或 Bookmark。
+```bash
+npm run check
+npm test
+```
 
-更新到 0.1.1 后，在 `chrome://extensions` 重新加载扩展，再刷新 X 页面和 Idea Planet。旧的截断内容需要回到原帖，用插件弹窗“重新采集当前帖子”补全；已有想法和归档状态会保留。长卡片可点击“展开全文”。
+已实现本地存储、Idea 编辑和关系、插件采集、关键词 Recall 及结果保存。外部模型、综合/写作/研究任务、智能关联仍待开发。
 
-发布自己的帖子或回复时，点击 Post/发布或使用 macOS `Cmd+Enter`（Windows/Linux `Ctrl+Enter`）都能触发采集；普通 Enter 只会换行。
-
-展开操作最多等待约 8 秒，并等待正文稳定后才保存。如果加载失败，插件提示重新采集，不会把这次折叠预览报告为保存成功。正文不再设置 20,000 字符截断，也不删除正文中的重复行、纯数字或 @ 提及。引用内容、未加载的线程、图片内文字及 X 文章不属于全文保证范围。
-
-本地浏览器回归验证（隔离临时 Chrome，不使用个人登录）：启动网站后运行 `python3 tests/long-post.py`，需安装 Google Chrome 和 Python 的 `websocket-client`。覆盖延迟展开、帖子节点替换、超长正文、重复采集补全、保留个人想法、网页全文展开及刷新持久化。当前 `Ask Planet` 的 API 闭环由 `npm test` 覆盖。
-
-## MVP 边界
-
-需求原意与取舍分别记录在 [docs/01-user-intent.md](./docs/01-user-intent.md) 和 [docs/02-mvp-scope.md](./docs/02-mvp-scope.md)。这一版先验证“收集 → 回顾 → 决定去留 → 内化和延伸”，默认不依赖账号、云端同步或外部模型。
+产品核心见 [产品核心](docs/04-product-core.md)，当前路线见 [开发路线](docs/07-backend-agent-roadmap.md)，接口见 [本地 API](docs/08-backend-api.md)。

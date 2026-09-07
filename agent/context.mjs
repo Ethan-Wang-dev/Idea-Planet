@@ -9,10 +9,10 @@ function scoreIdea(idea, queryTerms) {
   return queryTerms.reduce((score, term) => score + (text.includes(term) ? (idea.title?.toLowerCase().includes(term) ? 4 : 1) : 0), 0);
 }
 
-export function buildContext(userId, task, { limit = 12 } = {}) {
+export function buildContext(workspaceId, task, { limit = 12 } = {}) {
   const prompt = task.input?.prompt || '';
   const queryTerms = terms(prompt);
-  const candidates = listIdeas(userId).map(idea => ({ idea, score: scoreIdea(idea, queryTerms) }))
+  const candidates = listIdeas(workspaceId).map(idea => ({ idea, score: scoreIdea(idea, queryTerms) }))
     .filter(candidate => !queryTerms.length || candidate.score > 0)
     .sort((left, right) => right.score - left.score || new Date(right.idea.createdAt) - new Date(left.idea.createdAt))
     .slice(0, Math.min(Math.max(Number(limit) || 12, 1), 50));

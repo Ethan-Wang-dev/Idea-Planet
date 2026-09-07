@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check db.mjs && node --check landing.mjs && node --check app/app.js && node --check agent/context.mjs && node --check agent/kernel.mjs && node --check agent/local-provider.mjs && node --check agent/repository.mjs",
+    "check": "node --check server.mjs && node --check db.mjs && node --check app/app.js && node --check agent/context.mjs && node --check agent/kernel.mjs && node --check agent/local-provider.mjs && node --check agent/repository.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

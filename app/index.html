@@ -8,96 +8,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div id="landingRoot" class="landing-root">
-      <header class="landing-nav">
-        <a class="landing-brand" href="#hero" aria-label="Idea Planet 首页">
-          <span class="landing-brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-          <span>idea<span>planet</span></span>
-        </a>
-        <nav class="landing-nav-links" aria-label="首页导航">
-          <a href="#features">功能</a>
-          <a href="#gallery">使用案例</a>
-          <a href="#community">创作者社区</a>
-        </nav>
-        <div class="landing-nav-actions"><div class="landing-socials" aria-label="社交链接"><a href="https://x.com/ideaplanet" target="_blank" rel="noreferrer" aria-label="X">𝕏</a><a href="https://discord.com" target="_blank" rel="noreferrer" aria-label="Discord">◉</a></div>
-          <a href="#login" class="landing-login" data-auth-mode="login">登录</a>
-          <button class="menu-toggle" data-action="toggleMenu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
-        </div>
-      </header>
-
-      <main>
-        <section class="landing-hero" id="hero">
-          <div class="hero-copy">
-            <p class="landing-eyebrow" id="landingEyebrow">IDEA PLANET · 2026</p>
-            <h1 id="landingTitle">大胆创作</h1>
-            <p class="hero-subtitle" id="landingSubtitle">最好的学习，是把灵感留给未来的自己。</p>
-            <p class="hero-description" id="landingDescription">把你在 X 上看过、写过和实践过的内容，带回一个属于你的空间。收集、回看、写下自己的判断，让每个念头都有机会变成作品。</p>
-            <div class="hero-actions">
-              <button class="landing-primary" data-action="startCreating">开始创作 <span>→</span></button>
-              <a class="landing-secondary" href="#features">了解 Idea Planet <span>↓</span></a>
-            </div>
-          </div>
-          <div class="hero-canvas" aria-label="Idea Planet 创作预览">
-            <div class="hero-orbit hero-orbit-one"></div><div class="hero-orbit hero-orbit-two"></div>
-            <div class="hero-star star-one">✦</div><div class="hero-star star-two">✧</div>
-            <div class="hero-note note-one"><span>09:41</span><strong>一个值得继续的问题</strong><small>记录 · 现在</small></div>
-            <div class="hero-note note-two"><span>IDEA / 014</span><strong>把注意力交还给自己</strong><small>由一次收藏开始</small></div>
-            <div class="hero-spark">✦</div>
-          </div>
-        </section>
-
-        <section class="landing-composer-wrap" aria-label="快速记录">
-          <div class="landing-composer">
-            <div class="composer-label"><span class="composer-dot"></span><span>把一个念头送入你的星球</span><span class="composer-hint">无需准备，从一句话开始</span></div>
-            <textarea data-action="composerPrompt" rows="1" placeholder="你想记录什么？" aria-label="想法内容"></textarea>
-            <div class="composer-footer"><span>Idea Planet 会帮你保留它的来处，也留出让它继续生长的空间。</span><button class="composer-submit" data-action="startCreating" aria-label="开始创作">→</button></div>
-          </div>
-        </section>
-
-        <section class="landing-section feature-section" id="features">
-          <div class="section-intro"><p class="landing-eyebrow">YOUR CREATIVE WORKSPACE</p><h2>把灵感变成<br /><em>可以回来的地方。</em></h2><p>你会偶然遇见一些重要的东西——一篇文章、一段视频、一个停不下来的念头。Idea Planet 让它们不再只是划过屏幕的瞬间。</p></div>
-          <div class="feature-grid">
-            <article class="feature-card feature-blue"><div class="feature-visual"><div class="visual-window"><span></span><span></span><span></span><i>✦</i></div><div class="visual-line line-one"></div><div class="visual-line line-two"></div></div><div class="feature-card-copy"><span>01 · CAPTURE</span><h3>轻松收集</h3><p>看到值得留下的内容，随手带回你的星球。</p></div></article>
-            <article class="feature-card feature-gold"><div class="feature-visual"><div class="visual-sun"></div><div class="visual-path"></div><div class="visual-person"></div></div><div class="feature-card-copy"><span>02 · REFLECT</span><h3>深度思考</h3><p>在再次遇见它的时候，写下真正属于你的判断。</p></div></article>
-            <article class="feature-card feature-coral"><div class="feature-visual"><div class="visual-paper"><b>IDEA</b><span>→ ACTION</span><i>✦</i></div><div class="visual-orbit-small"></div></div><div class="feature-card-copy"><span>03 · CREATE</span><h3>持续创作</h3><p>让零散的灵感互相连接，慢慢长成可以发布的作品。</p></div></article>
-          </div>
-        </section>
-
-        <section class="studio-section" id="create">
-          <div class="studio-copy"><p class="landing-eyebrow">YOUR AI CREATIVE STUDIO</p><h2>每一次记录，<br />都在靠近你的作品。</h2><p>从收集到整理，从一个问题到下一步行动。先把自己的素材和判断放在一起，Agent 会在准备好之后再加入。</p><button class="light-button" data-action="startCreating">进入你的工作室 <span>→</span></button></div>
-          <div class="studio-art"><div class="studio-card studio-card-main"><span>MY PLANET</span><strong>014</strong><small>ideas with a direction</small></div><div class="studio-card studio-card-float"><span>CONNECTED</span><strong>07</strong><small>new paths today</small></div><div class="studio-ring"></div></div>
-        </section>
-
-        <section class="landing-section gallery-section" id="gallery">
-          <div class="gallery-heading"><div><p class="landing-eyebrow">MADE WITH IDEA PLANET</p><h2>用 Idea Planet 创作</h2><p>来自创作者的真实作品</p></div><a href="#community">查看全部 <span>→</span></a></div>
-          <div class="gallery-grid" id="landingGallery"></div>
-        </section>
-
-        <section class="community-section" id="community">
-          <div class="community-banner"><div class="community-image community-image-one"></div><div class="community-image community-image-two"></div><div class="community-image community-image-three"></div><div class="community-message"><p class="landing-eyebrow">IDEA PLANET COMMUNITY</p><h2 id="communityTitle">想创作的念头，<br />在心里转了多久？</h2><p id="communityDescription">来自不同领域的创作者，都在 Idea Planet 开启创作。</p><button class="light-button" data-action="startCreating">和他们一起开始 <span>→</span></button></div></div>
-        </section>
-
-        <section class="landing-section stats-section" id="pricing">
-          <div class="stats-heading"><p class="landing-eyebrow">A GROWING PLANET</p><h2>每个想法，<br />都值得一个未来。</h2></div>
-          <div class="stats-grid" id="landingStats"></div>
-        </section>
-
-        <section class="landing-cta" id="download"><p class="landing-eyebrow">READY WHEN YOU ARE</p><h2>今天，给一个念头<br /><em>多一点时间。</em></h2><button class="landing-primary" data-action="startCreating">开始创作 <span>→</span></button></section>
-      </main>
-
-      <footer class="landing-footer" id="footer">
-        <div class="footer-brand"><a class="landing-brand" href="#hero"><span class="landing-brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>idea<span>planet</span></span></a><p>让过去的想法，在今天继续为你创造。</p><small>© 2026 IDEA PLANET</small></div>
-        <div class="footer-links"><div><strong>探索</strong><a href="#features">功能</a><a href="#gallery">使用案例</a><a href="#community">创作者社区</a></div><div><strong>产品</strong><a href="#pricing">定价</a><a href="#download">下载</a><a href="#updates">更新</a></div><div><strong>联系</strong><a href="mailto:hello@ideaplanet.app">联系我们</a><a href="#privacy">隐私政策</a><a href="#terms">服务条款</a></div></div>
-      </footer>
-    </div>
-
-    <div id="menuPanel" class="menu-panel" hidden>
-      <div class="menu-panel-inner"><div class="menu-panel-top"><span>IDEA PLANET</span><button data-action="toggleMenu" aria-label="关闭菜单">×</button></div><nav><a href="#hero" data-menu-link>概览 <span>01</span></a><a href="#gallery" data-menu-link>使用案例 <span>02</span></a><a href="#features" data-menu-link>功能 <span>03</span></a><a href="#create" data-menu-link>创作工作室 <span>04</span></a><a href="#pricing" data-menu-link>定价 <span>05</span></a><a href="#community" data-menu-link>创作者社区 <span>06</span></a></nav><div class="menu-panel-bottom"><span>每一个想法，都可以从这里开始。</span><button data-action="startCreating">开始创作 <span>→</span></button></div></div>
-    </div>
-
-    <div id="cookieBanner" class="cookie-banner" hidden><div><strong>我们使用 Cookie</strong><p>Cookie 让网站正常运行，也帮助我们了解使用情况。你可以随时更改偏好。</p><a href="#privacy">阅读 Cookie 政策</a></div><div class="cookie-actions"><button data-action="dismissCookie">知道了</button><button data-action="dismissCookie">不要出售或共享我的个人信息</button><button data-action="dismissCookie" class="cookie-custom">自定义</button></div></div>
-
-    <div id="workspaceShell" class="app-shell" hidden>
+    <div id="workspaceShell" class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="#today" aria-label="Idea Planet 首页">
           <span class="brand-mark"><span></span><span></span><span></span></span>
@@ -126,7 +37,7 @@
 
         <div class="sidebar-bottom">
           <button class="text-button" data-action="export" title="导出数据"><span>↓</span> export</button>
-          <span class="local-note">local / private</span>
+          <span class="local-note" id="storageStatus">local</span>
         </div>
       </aside>
 

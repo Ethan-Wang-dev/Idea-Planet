@@ -1,5 +1,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
+import Database from 'better-sqlite3';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,7 +34,7 @@ before(async () => {
   base = `http://127.0.0.1:${port}`;
   processHandle = spawn(process.execPath, ['server.mjs'], {
     cwd: new URL('..', import.meta.url),
-    env: { ...process.env, IDEA_PLANET_PORT: String(port), IDEA_PLANET_DB: join(dataDir, 'test.sqlite') },
+    env: { ...process.env, PORT: String(port), IDEA_PLANET_PORT: String(port), IDEA_PLANET_DB: join(dataDir, 'test.sqlite') },
     stdio: 'ignore'
   });
   await waitForHealth();
@@ -43,59 +45,29 @@ after(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
-test('requires authentication for user data', async () => {
+test('opens the local workspace without identity and removes SaaS endpoints', async () => {
   const result = await json(`${base}/api/v1/ideas`);
-  assert.equal(result.response.status, 401);
-  assert.equal(result.payload.error, 'unauthorized');
+  assert.equal(result.response.status, 200);
+  for (const path of ['/auth/register', '/auth/login', '/auth/dev-session', '/me', '/public/home', '/sync/push']) {
+    const response = await fetch(base + '/api/v1' + path, { method: 'POST' });
+    assert.equal(response.status, 404, path);
+  }
+  const html = await (await fetch(base)).text();
+  assert.ok(html.includes('workspaceShell'));
+  assert.ok(!html.includes('landingRoot'));
+  assert.ok(!html.includes('data-auth-mode'));
 });
-
-test('serves the public landing contract without authentication', async () => {
-  const config = await json(`${base}/api/v1/public/config`);
-  assert.equal(config.response.status, 200);
-  assert.equal(config.payload.service, 'idea-planet');
-  assert.equal(config.payload.agent.enabled, false);
-  assert.equal(typeof config.payload.devSessionEnabled, 'boolean');
-
-  const home = await json(`${base}/api/v1/public/home`);
-  assert.equal(home.response.status, 200);
-  assert.equal(home.payload.brand.name, 'Idea Planet');
-  assert.equal(home.payload.hero.title, '大胆创作');
-  assert.ok(home.payload.features.length >= 3);
-  assert.ok(home.payload.gallery.every(item => item.image && item.title));
-  assert.ok(home.payload.stats.some(item => item.value === '700K+'));
+test('rejects unrelated websites and DNS rebinding hosts', async () => {
+  for (const headers of [{ Origin: 'https://example.com' }, { Host: 'attacker.example' }, { 'Sec-Fetch-Site': 'cross-site' }]) {
+    const status = await new Promise((resolve, reject) => {
+      const req = request(base + '/api/v1/ideas', { headers }, res => { res.resume(); resolve(res.statusCode); });
+      req.on('error', reject); req.end();
+    });
+    assert.equal(status, 403, JSON.stringify(headers));
+  }
 });
-
-test('registers, logs in and revokes a password session', async () => {
-  const email = `test-${Date.now()}@example.com`;
-  const registered = await json(`${base}/api/v1/auth/register`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'correct horse battery staple', displayName: 'Test Creator' })
-  });
-  assert.equal(registered.response.status, 201);
-  assert.equal(registered.payload.user.displayName, 'Test Creator');
-  assert.ok(registered.payload.token);
-
-  const login = await json(`${base}/api/v1/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'correct horse battery staple' })
-  });
-  assert.equal(login.response.status, 200);
-  assert.ok(login.payload.token);
-
-  const me = await json(`${base}/api/v1/me`, { headers: { Authorization: `Bearer ${login.payload.token}` } });
-  assert.equal(me.response.status, 200);
-  assert.equal(me.payload.user.email, email);
-
-  const logout = await fetch(`${base}/api/v1/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${login.payload.token}` } });
-  assert.equal(logout.status, 204);
-  const afterLogout = await json(`${base}/api/v1/me`, { headers: { Authorization: `Bearer ${login.payload.token}` } });
-  assert.equal(afterLogout.response.status, 401);
-});
-
 test('creates, updates and pulls an Idea through the API', async () => {
-  const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
-  assert.equal(session.response.status, 200);
-  const auth = { Authorization: `Bearer ${session.payload.token}` };
+  const auth = {};
 
   const created = await json(`${base}/api/v1/ideas`, {
     method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
@@ -126,15 +98,10 @@ test('creates, updates and pulls an Idea through the API', async () => {
   assert.equal(list.response.status, 200);
   assert.equal(list.payload.ideas.length, 1);
 
-  const changes = await json(`${base}/api/v1/sync/pull?after=0`, { headers: auth });
-  assert.equal(changes.response.status, 200);
-  assert.equal(changes.payload.changes.length, 2);
-  assert.equal(changes.payload.ideas.at(-1).body, 'Updated body');
 });
 
-test('soft deletes an Idea and exposes a sync tombstone', async () => {
-  const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
-  const auth = { Authorization: `Bearer ${session.payload.token}`, 'Content-Type': 'application/json' };
+test('soft deletes an Idea without losing the recoverable record', async () => {
+  const auth = {};
   const created = await json(`${base}/api/v1/ideas`, {
     method: 'POST', headers: auth,
     body: JSON.stringify({ id: 'tombstone-idea', body: 'to be removed' })
@@ -145,26 +112,21 @@ test('soft deletes an Idea and exposes a sync tombstone', async () => {
   assert.ok(deleted.payload.idea.deletedAt);
   const list = await json(`${base}/api/v1/ideas`, { headers: auth });
   assert.equal(list.payload.ideas.some(idea => idea.id === 'tombstone-idea'), false);
-  const changes = await json(`${base}/api/v1/sync/pull?after=0`, { headers: auth });
-  const tombstone = changes.payload.changes.find(change => change.entityId === 'tombstone-idea' && change.deletedAt);
-  assert.ok(tombstone);
 });
 
-test('push is idempotent by user and idea id', async () => {
-  const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
-  const auth = { Authorization: `Bearer ${session.payload.token}`, 'Content-Type': 'application/json' };
+test('push is idempotent by idea id', async () => {
+  const auth = {};
   const payload = { ideas: [{ id: 'sync-idea', sourceType: 'bookmark', body: 'same id' }] };
-  const first = await json(`${base}/api/v1/sync/push`, { method: 'POST', headers: auth, body: JSON.stringify(payload) });
-  const second = await json(`${base}/api/v1/sync/push`, { method: 'POST', headers: auth, body: JSON.stringify(payload) });
+  const first = await json(`${base}/api/v1/local/ideas/batch`, { method: 'POST', headers: auth, body: JSON.stringify(payload) });
+  const second = await json(`${base}/api/v1/local/ideas/batch`, { method: 'POST', headers: auth, body: JSON.stringify(payload) });
   assert.equal(first.response.status, 200);
   assert.equal(second.response.status, 200);
-  const list = await json(`${base}/api/v1/ideas`, { headers: { Authorization: auth.Authorization } });
+  const list = await json(`${base}/api/v1/ideas`, { headers: auth });
   assert.equal(list.payload.ideas.filter(idea => idea.id === 'sync-idea').length, 1);
 });
 
-test('stores typed Idea relations and includes them in the sync stream', async () => {
-  const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
-  const auth = { Authorization: `Bearer ${session.payload.token}`, 'Content-Type': 'application/json' };
+test('stores typed Idea relations', async () => {
+  const auth = {};
   for (const id of ['relation-from', 'relation-to']) {
     await json(`${base}/api/v1/ideas`, { method: 'POST', headers: auth, body: JSON.stringify({ id, body: id }) });
   }
@@ -179,13 +141,10 @@ test('stores typed Idea relations and includes them in the sync stream', async (
   assert.deepEqual(created.payload.relation.metadata, { confidence: 0.8 });
   const list = await json(`${base}/api/v1/relations?ideaId=relation-from`, { headers: auth });
   assert.equal(list.payload.relations.length, 2);
-  const changes = await json(`${base}/api/v1/sync/pull?after=0`, { headers: auth });
-  assert.ok(changes.payload.relations.some(relation => relation.id === created.payload.relation.id));
 });
 
 test('runs the local Recall Agent through the durable task lifecycle', async () => {
-  const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
-  const auth = { Authorization: `Bearer ${session.payload.token}`, 'Content-Type': 'application/json' };
+  const auth = {};
   await json(`${base}/api/v1/ideas`, { method: 'POST', headers: auth, body: JSON.stringify({ id: 'agent-context', title: 'Personal context', body: 'A useful idea about context and memory.' }) });
   const created = await json(`${base}/api/v1/agent/tasks`, {
     method: 'POST', headers: auth, body: JSON.stringify({ type: 'recall', prompt: 'context memory' })
@@ -225,9 +184,8 @@ test('runs the local Recall Agent through the durable task lifecycle', async () 
   assert.equal(unsupportedDetail.payload.task.error.code, 'PROVIDER_UNAVAILABLE');
 });
 
-test('keeps tags and boards behind the authenticated workspace API', async () => {
-  const session = await json(`${base}/api/v1/auth/dev-session`, { method: 'POST' });
-  const auth = { Authorization: `Bearer ${session.payload.token}`, 'Content-Type': 'application/json' };
+test('stores local tags and boards without an account', async () => {
+  const auth = {};
   const tag = await json(`${base}/api/v1/tags`, { method: 'POST', headers: auth, body: JSON.stringify({ name: 'Design' }) });
   assert.equal(tag.response.status, 201);
   const tags = await json(`${base}/api/v1/tags`, { headers: auth });
@@ -239,4 +197,13 @@ test('keeps tags and boards behind the authenticated workspace API', async () =>
   assert.ok(boards.payload.boards.some(item => item.id === board.payload.board.id));
   const deleted = await json(`${base}/api/v1/boards/${board.payload.board.id}?revision=${board.payload.board.revision}`, { method: 'DELETE', headers: auth });
   assert.equal(deleted.response.status, 200);
+});
+
+test('stores personal data on disk without account or sync tables', () => {
+  const database = new Database(join(dataDir, 'test.sqlite'), { readonly: true });
+  try {
+    const names = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);
+    for (const name of ['users', 'sessions', 'change_log']) assert.ok(!names.includes(name));
+    assert.equal(database.prepare('SELECT body FROM ideas WHERE id = ?').get('api-test-idea').body, 'Updated body');
+  } finally { database.close(); }
 });
