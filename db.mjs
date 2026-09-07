@@ -231,7 +231,8 @@ export function registerUser({ email, password, displayName }) {
   const id = `user_${cryptoRandom()}`; const createdAt = now();
   const salt = randomBytes(16).toString('hex');
   const hash = `${salt}:${scryptSync(String(password), salt, 64).toString('hex')}`;
-  db.prepare('INSERT INTO users (id,email,display_name,created_at,password_hash) VALUES (?,?,?,?,?)').run(id, clean, String(displayName || clean.split('@')[0]).slice(0,80), createdAt, hash);
+  const name = String(displayName || '').trim().slice(0, 80) || clean.split('@')[0];
+  db.prepare('INSERT INTO users (id,email,display_name,created_at,password_hash) VALUES (?,?,?,?,?)').run(id, clean, name, createdAt, hash);
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   return { token: issueSession(id), user: publicUser(user) };
 }
@@ -253,7 +254,8 @@ export function updateUser(userId, { displayName, password }) {
     if (String(password).length < 8) throw Object.assign(new Error('Password must be at least 8 characters'), { status: 400 });
     const salt = randomBytes(16).toString('hex'); hash = `${salt}:${scryptSync(String(password), salt, 64).toString('hex')}`;
   }
-  db.prepare('UPDATE users SET display_name = ?, password_hash = ? WHERE id = ?').run(displayName === undefined ? user.display_name : String(displayName).trim().slice(0,80), hash, userId);
+  const name = displayName === undefined ? user.display_name : (String(displayName).trim().slice(0, 80) || user.display_name);
+  db.prepare('UPDATE users SET display_name = ?, password_hash = ? WHERE id = ?').run(name, hash, userId);
   return publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId));
 }
 export function deleteUser(userId) { db.prepare('DELETE FROM users WHERE id = ?').run(userId); }
